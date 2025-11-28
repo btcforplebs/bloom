@@ -528,10 +528,20 @@ export const BlobPreview: React.FC<{
         const headers: Record<string, string> = {};
         if (requiresAuth && signTemplate) {
           const parsed = new URL(url, window.location.href);
+          const authServerUrl = `${parsed.protocol}//${parsed.host}`;
+          const authUrlPath = `${parsed.pathname}${parsed.search}`;
+
+          console.log("Building GET authorization for blob:", {
+            sha: sha.substring(0, 16) + "...",
+            serverUrl: authServerUrl,
+            urlPath: authUrlPath,
+            fullUrl: url,
+          });
+
           headers.Authorization = await buildAuthorizationHeader(signTemplate, "get", {
             hash: sha,
-            serverUrl: `${parsed.protocol}//${parsed.host}`,
-            urlPath: `${parsed.pathname}${parsed.search}`,
+            serverUrl: authServerUrl,
+            urlPath: authUrlPath,
             expiresInSeconds: 120,
           });
         }

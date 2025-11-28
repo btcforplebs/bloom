@@ -90,6 +90,12 @@ export const useServers = () => {
           console.warn("Failed to prepare relays for server list fetch", error);
         }
       }
+      // Prevent "No filters to merge" error
+      if (!relaySet) {
+        console.warn("No relay set available for fetching server list, using default servers");
+        return [];
+      }
+
       const events = (await ndk.fetchEvents(
         {
           authors: [pubkey],

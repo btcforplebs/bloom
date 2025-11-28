@@ -55,8 +55,16 @@ export const fetchNip94ByHashes = async (
   }
 
   // Prevent "No filters to merge" error by checking relay availability
+  // Check both the relaySet itself and the underlying relays
   if (!relaySet || relaySet.size === 0) {
-    console.warn("No relays available for NIP-94 fetch, skipping");
+    console.warn("No relays available for NIP-94 fetch (no relay set), skipping");
+    return new Map();
+  }
+
+  // Additional check: ensure relays exist in the set
+  const relayArray = Array.from(relaySet.relays || []);
+  if (relayArray.length === 0) {
+    console.warn("No relays available for NIP-94 fetch (empty relay array), skipping");
     return new Map();
   }
 
