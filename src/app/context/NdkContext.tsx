@@ -589,17 +589,26 @@ export const NdkProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const adoptSigner = useCallback(
     async (nextSigner: NDKSigner | null) => {
+      console.log("[NDK] adoptSigner called", { hasSigner: Boolean(nextSigner) });
       try {
         if (nextSigner) {
+          console.log("[NDK] Adopting signer - ensuring connection...");
           const instance = await ensureNdkConnection();
+          console.log("[NDK] Connection ensured, getting user from signer...");
           const nextUser = await nextSigner.user();
+          console.log("[NDK] Got user from signer", {
+            pubkey: nextUser?.pubkey?.substring(0, 16) + "...",
+            npub: nextUser?.npub?.substring(0, 16) + "...",
+          });
           instance.signer = nextSigner;
           removeFallbackRelays(instance);
           setRelayHealth(current => current.filter(entry => !isFallbackRelay(entry.url)));
+          console.log("[NDK] Setting signer and user state...");
           setSigner(nextSigner);
           setUser(nextUser);
           setStatus("connected");
           setConnectionError(null);
+          console.log("[NDK] Signer adoption complete");
           const module = ndkModuleRef.current;
           const nip07Ctor = module?.NDKNip07Signer;
           if (nip07Ctor && nextSigner instanceof nip07Ctor) {
@@ -610,6 +619,7 @@ export const NdkProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             signerPreferenceRef.current = null;
           }
         } else {
+          console.log("[NDK] Clearing signer");
           const instance = ndkRef.current;
           if (instance) {
             instance.signer = undefined;
@@ -626,6 +636,7 @@ export const NdkProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           signerPreferenceRef.current = null;
         }
       } catch (error) {
+        console.error("[NDK] Failed to adopt signer", error);
         const normalized = error instanceof Error ? error : new Error("Failed to adopt signer");
         setConnectionError(normalized);
         setStatus("error");

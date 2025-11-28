@@ -107,17 +107,33 @@ export const Nip46Provider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (!sessionManager) return;
     let unsubscribe: (() => void) | null = null;
     let disposed = false;
+    console.log("[NIP-46] Starting session hydration...");
     sessionManager
       .hydrate()
       .then(hydratedSnapshot => {
-        if (disposed) return;
+        if (disposed) {
+          console.log("[NIP-46] Hydration completed but context was disposed");
+          return;
+        }
+        console.log("[NIP-46] Sessions hydrated successfully", {
+          sessionCount: hydratedSnapshot.sessions.length,
+          activeSessions: hydratedSnapshot.sessions.filter(s => s.status === "active").length,
+          sessionsWithUserPubkey: hydratedSnapshot.sessions.filter(s => s.userPubkey).length,
+        });
         setSnapshot(hydratedSnapshot);
         setReady(true);
-        unsubscribe = sessionManager.onChange(setSnapshot);
+        unsubscribe = sessionManager.onChange(snapshot => {
+          console.log("[NIP-46] Session snapshot changed", {
+            sessionCount: snapshot.sessions.length,
+            activeSessions: snapshot.sessions.filter(s => s.status === "active").length,
+            sessionsWithUserPubkey: snapshot.sessions.filter(s => s.userPubkey).length,
+          });
+          setSnapshot(snapshot);
+        });
       })
       .catch(error => {
         if (disposed) return;
-        console.error("Failed to hydrate NIP-46 sessions", error);
+        console.error("[NIP-46] Failed to hydrate NIP-46 sessions", error);
         setReady(true);
         unsubscribe = sessionManager.onChange(setSnapshot);
       });
@@ -213,29 +229,62 @@ export const Nip46Provider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   useEffect(() => {
     const mod = moduleRef.current;
-    if (!mod || !ndk || !ready || !transportReady || !service || !sessionManager) return;
+    if (!mod || !ndk || !ready || !transportReady || !service || !sessionManager) {
+      console.log("[NIP-46] Signer adoption skipped - dependencies not ready", {
+        hasModule: Boolean(mod),
+        hasNdk: Boolean(ndk),
+        ready,
+        transportReady,
+        hasService: Boolean(service),
+        hasSessionManager: Boolean(sessionManager),
+      });
+      return;
+    }
 
     const candidate = snapshot.sessions.find(
       session => session.status === "active" && session.userPubkey && !session.lastError,
     );
 
+    console.log("[NIP-46] Checking for candidate session", {
+      totalSessions: snapshot.sessions.length,
+      candidateFound: Boolean(candidate),
+      candidateId: candidate?.id,
+      candidateUserPubkey: candidate?.userPubkey?.substring(0, 16) + "...",
+    });
+
     const current = activeSessionRef.current;
 
     if (!candidate) {
       if (current) {
+        console.log("[NIP-46] No candidate found, clearing active signer");
         activeSessionRef.current = null;
         void adoptSigner(null);
       }
       return;
     }
 
-    if (candidate.id === current) return;
+    if (candidate.id === current) {
+      console.log("[NIP-46] Candidate already active, skipping adoption");
+      return;
+    }
+
+    console.log("[NIP-46] Adopting new signer", {
+      sessionId: candidate.id,
+      userPubkey: candidate.userPubkey?.substring(0, 16) + "...",
+    });
 
     const signer = new mod.Nip46DelegatedSigner(ndk, service, sessionManager, candidate.id);
     activeSessionRef.current = candidate.id;
-    void adoptSigner(signer).catch(error => {
-      console.error("Failed to adopt NIP-46 signer", error);
-    });
+
+    adoptSigner(signer)
+      .then(() => {
+        console.log("[NIP-46] Signer adopted successfully");
+      })
+      .catch(error => {
+        console.error("[NIP-46] Failed to adopt signer", error);
+        // Reset on failure to allow retry
+        activeSessionRef.current = null;
+      });
   }, [adoptSigner, ndk, ready, transportReady, service, sessionManager, snapshot.sessions]);
 
   const value = useMemo<Nip46ContextValue>(

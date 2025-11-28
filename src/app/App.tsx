@@ -517,6 +517,16 @@ export default function App() {
 
   const isSignedIn = Boolean(user);
   const showAuthPrompt = !isSignedIn;
+
+  useEffect(() => {
+    console.log("[App] User state changed", {
+      hasUser: Boolean(user),
+      pubkey: user?.pubkey?.substring(0, 16) + "...",
+      npub: user?.npub?.substring(0, 16) + "...",
+      isSignedIn,
+      showAuthPrompt,
+    });
+  }, [user, isSignedIn, showAuthPrompt]);
   const compactUploadLabel = hasSelection ? "Transfer" : "Upload";
   const compactUploadIcon = hasSelection ? TransferIcon : UploadIcon;
   const compactUploadActive = hasSelection || tab === "upload" || tab === "transfer";

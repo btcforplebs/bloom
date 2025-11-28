@@ -192,18 +192,36 @@ export class IndexedDbStorageAdapter implements StorageAdapter {
   }
 }
 
+const isSafari = () => {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  return /^((?!chrome|android).)*safari/i.test(ua);
+};
+
 export const createStorageAdapter = async (): Promise<StorageAdapter> => {
   if (typeof window === "undefined") {
     return new MemoryStorageAdapter();
   }
+
+  console.log("[NIP-46 Storage] Creating storage adapter", {
+    hasIndexedDB: typeof indexedDB !== "undefined",
+    hasLocalStorage: typeof localStorage !== "undefined",
+    isSafari: isSafari(),
+  });
+
   if (typeof indexedDB !== "undefined") {
     try {
       const adapter = new IndexedDbStorageAdapter();
       await openIndexedDb();
+      console.log("[NIP-46 Storage] IndexedDB adapter created successfully");
       return adapter;
     } catch (error) {
-      console.warn("IndexedDB storage unavailable for NIP-46 sessions", error);
+      console.warn("[NIP-46 Storage] IndexedDB storage unavailable for NIP-46 sessions", error);
+      console.log("[NIP-46 Storage] Falling back to localStorage");
     }
   }
-  return new LocalStorageAdapter();
+
+  const localStorageAdapter = new LocalStorageAdapter();
+  console.log("[NIP-46 Storage] Using localStorage adapter");
+  return localStorageAdapter;
 };
