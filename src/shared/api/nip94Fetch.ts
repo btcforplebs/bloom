@@ -53,6 +53,13 @@ export const fetchNip94ByHashes = async (
       console.warn("Unable to build relay set for NIP-94 lookup", error);
     }
   }
+
+  // Prevent "No filters to merge" error by checking relay availability
+  if (!relaySet || relaySet.size === 0) {
+    console.warn("No relays available for NIP-94 fetch, skipping");
+    return new Map();
+  }
+
   const timeoutMs = options?.timeoutMs ?? 7000;
   let fetchTimedOut = false;
   let timeoutHandle: ReturnType<typeof setTimeout> | null = null;

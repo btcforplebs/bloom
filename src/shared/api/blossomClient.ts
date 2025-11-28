@@ -172,7 +172,8 @@ async function computeBlobSha256Hex(blob: Blob): Promise<string> {
 }
 
 async function createAuthEvent(signTemplate: SignTemplate, kind: AuthKind, data?: AuthData) {
-  const expiration = Math.floor(Date.now() / 1000) + (data?.expiresInSeconds ?? 300);
+  const now = Math.floor(Date.now() / 1000);
+  const expiration = now + (data?.expiresInSeconds ?? 300);
   const authAction = kind === "mirror" ? "upload" : kind;
   const tags: string[][] = [
     ["t", authAction],
@@ -223,9 +224,18 @@ async function createAuthEvent(signTemplate: SignTemplate, kind: AuthKind, data?
   const template: EventTemplate = {
     kind: BLOSSOM_KIND_AUTH,
     content: "",
-    created_at: Math.floor(Date.now() / 1000),
+    created_at: now,
     tags,
   };
+
+  console.log("Creating auth event:", {
+    kind: authAction,
+    created_at: now,
+    expiration,
+    hash: data?.hash?.substring(0, 16) + "...",
+    tags: tags.map(([key]) => key).join(", "),
+  });
+
   return signTemplate(template);
 }
 
@@ -524,6 +534,16 @@ export async function uploadBlobToServer(
     }
 
     try {
+      console.log("Uploading to Blossom server:", {
+        url,
+        fileName: uploadFile.name,
+        size: uploadFile.size,
+        type: uploadFile.type,
+        hash: fileSha256Hex?.substring(0, 16) + "...",
+        requiresAuth,
+        skipSizeTag,
+      });
+
       const response = await axios.put(url, uploadFile, {
         headers,
         onUploadProgress: progressEvent => {
@@ -556,14 +576,37 @@ export async function uploadBlobToServer(
       if (axios.isAxiosError(error)) {
         const serverMessage =
           (error.response?.data as { message?: string } | undefined)?.message || error.message;
+        const status = error.response?.status;
+
+        console.error("Blossom upload failed:", {
+          status,
+          message: serverMessage,
+          url,
+          hash: fileSha256Hex?.substring(0, 16) + "...",
+        });
+
+        if (status === 401) {
+          throw new BloomHttpError(
+            "Upload authorization rejected (401). Check that your signer is connected and the server recognizes your pubkey.",
+            {
+              status: 401,
+              request: { url, method: "PUT" },
+              source: "blossom",
+              data: error.response?.data,
+            },
+          );
+        }
+
         if (
           requiresAuth &&
           !skipSizeTag &&
           (serverMessage || "").toLowerCase().includes("size tag")
         ) {
+          console.log("Retrying upload without size tag...");
           return attempt(true);
         }
-        if (error.response?.status === 413) {
+
+        if (status === 413) {
           throw new BloomHttpError(
             "Upload rejected: the server responded with 413 (payload too large). Reduce the file size or ask the server admin to raise the limit.",
             {
