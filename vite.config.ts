@@ -34,7 +34,7 @@ export default defineConfig({
   server: {
     port: 4173,
     strictPort: true,
-    allowedHosts: ['bloomapp.me'],
+    allowedHosts: ['bloom.btcforplebs.com'],
   },
   build: {
     modulePreload: {
